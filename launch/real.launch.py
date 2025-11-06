@@ -46,7 +46,11 @@ def launch_setup(context, *args, **kwargs):
     # Process URDF file
     pkg_dynaarm_description = FindPackageShare("dynaarm_single_example_description")
     doc = xacro.parse(
-        open(os.path.join(pkg_dynaarm_description, "urdf/dynaarm_single_example.urdf.xacro"))
+        open(
+            os.path.join(
+                pkg_dynaarm_description.perform(context), "urdf/dynaarm_single_example.urdf.xacro"
+            )
+        )
     )
     xacro.process_doc(
         doc,
@@ -57,7 +61,7 @@ def launch_setup(context, *args, **kwargs):
             "covers": LaunchConfiguration("covers").perform(context),
             "version": LaunchConfiguration("version").perform(context),
             "ethercat_bus": LaunchConfiguration("ethercat_bus").perform(context),
-            "prefix": LaunchConfiguration("arm_side").perform(context) + "/",
+            "tf_prefix": LaunchConfiguration("tf_prefix").perform(context) + "/",
         },
     )
 
@@ -96,10 +100,13 @@ def launch_setup(context, *args, **kwargs):
     )
 
     # Ros2 Controllers
-    prefix = LaunchConfiguration("arm_side").perform(context)
-    if prefix != "":
-        suffix = "_arm_" + prefix
-        prefix = "arm_" + prefix + "/"
+    tf_prefix = LaunchConfiguration("tf_prefix").perform(context)
+    if tf_prefix != "":
+        prefix = tf_prefix + "/"
+        suffix = "_" + tf_prefix
+    else:
+        prefix = ""
+        suffix = ""
 
     srdf_str = srdf_doc.toxml().replace("\n", "\\n").replace('"', '\\"')
     controllers_params = ReplaceString(
@@ -183,11 +190,12 @@ def generate_launch_description():
             default_value="false",
             description="Whether the platform is started as a subcomponent",
         ),
+        DeclareLaunchArgument("tf_prefix", default_value="arm_1", description="Arm identifier"),
         DeclareLaunchArgument(
-            "arm_side",
-            default_value="left",
-            choices=["left", "right"],
-            description="Prefix for arm names",
+            name="srdf_file",
+            default_value=get_package_share_directory("dynaarm_description")
+            + "/config/dynaarm.srdf",
+            description="Path to the robot SRDF file",
         ),
     ]
 
