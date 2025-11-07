@@ -79,14 +79,6 @@ def launch_setup(context, *args, **kwargs):
     )
 
     # Controller Manager
-    tf_prefix = LaunchConfiguration("tf_prefix").perform(context)
-    if tf_prefix != "":
-        prefix = tf_prefix + "/"
-        suffix = "_" + tf_prefix
-    else:
-        prefix = ""
-        suffix = ""
-
     controller_manager = Node(
         package="controller_manager",
         executable="ros2_control_node",
