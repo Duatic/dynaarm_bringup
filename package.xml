@@ -4,7 +4,7 @@
   <name>dynaarm_bringup</name>
   <version>0.0.0</version>
   <description>Starts up all modules for the dynaarm</description>
-  <maintainer email="mbloechli@student.ethz.ch">Marc Blöchlinger</maintainer>
+  <maintainer email="mbloechlinger@duatic.com">Marc Blöchlinger</maintainer>
   <license>Duatic</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
