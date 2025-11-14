@@ -29,6 +29,7 @@ from launch.actions import (
     IncludeLaunchDescription,
     OpaqueFunction,
 )
+from launch.conditions import UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
@@ -65,6 +66,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{"robot_description": doc.toxml()}],
         namespace=LaunchConfiguration("namespace"),
         remappings=[("/tf", "tf"), ("/tf_static", "tf_static")],
+        condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
     )
 
     # Spawn in Simulation
@@ -79,6 +81,7 @@ def launch_setup(context, *args, **kwargs):
             "z": LaunchConfiguration("initial_pose_z"),
             "yaw": LaunchConfiguration("initial_pose_yaw"),
         }.items(),
+        condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
     )
 
     # Ros2 Control
@@ -94,7 +97,7 @@ def launch_setup(context, *args, **kwargs):
         source_file=LaunchConfiguration("controllers_config"),
         replacements={"<prefix>": prefix, "<suffix>": suffix},
     )
-    control = IncludeLaunchDescription(
+    start_controllers = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([pkg_duatic_control, "launch", "control.launch.py"])
         ),
@@ -106,13 +109,10 @@ def launch_setup(context, *args, **kwargs):
 
     # Collect nodes to start
     nodes_to_start = [
-        control,
+        start_controllers,
+        robot_state_publisher,
+        spawn,
     ]
-
-    # Only start these nodes if not started as subcomponent
-    if LaunchConfiguration("start_as_subcomponent").perform(context).lower() == "false":
-        nodes_to_start.append(robot_state_publisher)
-        nodes_to_start.append(spawn)
 
     return nodes_to_start
 

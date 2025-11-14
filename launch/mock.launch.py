@@ -29,6 +29,7 @@ from launch.actions import (
     IncludeLaunchDescription,
     OpaqueFunction,
 )
+from launch.conditions import UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
@@ -76,6 +77,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{"robot_description": doc.toxml()}],
         namespace=LaunchConfiguration("namespace"),
         remappings=[("/tf", "tf"), ("/tf_static", "tf_static")],
+        condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
     )
 
     # Controller Manager
@@ -88,6 +90,7 @@ def launch_setup(context, *args, **kwargs):
             "stdout": "screen",
             "stderr": "screen",
         },
+        condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
     )
 
     # Ros2 Controllers
@@ -127,18 +130,16 @@ def launch_setup(context, *args, **kwargs):
         name="e_stop_node",
         output="screen",
         parameters=[{"emergency_stop_button": 9}],  # Change button index here
+        condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
     )
 
     # Collect nodes to start
     nodes_to_start = [
         start_controllers,
+        robot_state_publisher,
+        controller_manager,
+        e_stop_node,
     ]
-
-    # Only start these nodes if not started as subcomponent
-    if LaunchConfiguration("start_as_subcomponent").perform(context).lower() == "false":
-        nodes_to_start.append(robot_state_publisher)
-        nodes_to_start.append(controller_manager)
-        nodes_to_start.append(e_stop_node)
 
     return nodes_to_start
 
