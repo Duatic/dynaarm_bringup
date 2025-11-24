@@ -97,8 +97,6 @@ def launch_setup(context, *args, **kwargs):
     group_action = GroupAction(
         actions=optional_namespace
         + [
-            # Push Namespace
-            PushRosNamespace(LaunchConfiguration("namespace")),
             # Robot State Publisher
             Node(
                 package="robot_state_publisher",
