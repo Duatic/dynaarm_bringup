@@ -192,6 +192,7 @@ def generate_launch_description():
             default_value="false",
             description="Whether the platform is started as a subcomponent",
         ),
+        DeclareLaunchArgument(name="namespace", default_value=""),
         DeclareLaunchArgument("tf_prefix", default_value="", description="Arm identifier"),
         DeclareLaunchArgument(
             name="srdf_file",
