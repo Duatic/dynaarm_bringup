@@ -28,13 +28,14 @@ from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
     OpaqueFunction,
+    GroupAction,
 )
 from launch.conditions import UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 from launch_ros.substitutions import FindPackageShare
-from launch_ros.actions import Node
+from launch_ros.actions import Node, PushRosNamespace
 
 from nav2_common.launch import ReplaceString
 
@@ -43,16 +44,9 @@ def launch_setup(context, *args, **kwargs):
     # Package Directories
     pkg_duatic_control = FindPackageShare("duatic_control")
 
-    tf_prefix = LaunchConfiguration("tf_prefix").perform(context)
-    if tf_prefix != "":
-        prefix = tf_prefix + "_"
-        suffix = "_" + tf_prefix
-    else:
-        prefix = ""
-        suffix = ""
-
     # Process URDF file
-    doc = xacro.parse(open(LaunchConfiguration("urdf_file").perform(context)))
+    doc = xacro.parse(open(LaunchConfiguration("urdf_file_path").perform(context)))
+    tf_prefix = LaunchConfiguration("tf_prefix").perform(context)
     xacro.process_doc(
         doc,
         mappings={
@@ -61,7 +55,7 @@ def launch_setup(context, *args, **kwargs):
             "dof": LaunchConfiguration("dof").perform(context),
             "covers": LaunchConfiguration("covers").perform(context),
             "version": LaunchConfiguration("version").perform(context),
-            "tf_prefix": prefix,
+            "tf_prefix": tf_prefix + "_" if tf_prefix else "",
         },
     )
 
@@ -77,34 +71,18 @@ def launch_setup(context, *args, **kwargs):
         },
     )
 
-    # Robot State Publisher
-    robot_state_publisher = Node(
-        package="robot_state_publisher",
-        executable="robot_state_publisher",
-        output="screen",
-        parameters=[{"robot_description": doc.toxml()}],
-        namespace=LaunchConfiguration("namespace"),
-        remappings=[("/tf", "tf"), ("/tf_static", "tf_static")],
-        condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
-    )
+    # Process ros2_control_params file
+    tf_prefix = LaunchConfiguration("tf_prefix").perform(context)
+    if tf_prefix != "":
+        prefix = tf_prefix + "_"
+        suffix = "_" + tf_prefix
+    else:
+        prefix = ""
+        suffix = ""
 
-    # Controller Manager
-    controller_manager = Node(
-        package="controller_manager",
-        executable="ros2_control_node",
-        namespace=LaunchConfiguration("namespace"),
-        parameters=[{"update_rate": 1000}],
-        output={
-            "stdout": "screen",
-            "stderr": "screen",
-        },
-        condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
-    )
-
-    # Ros2 Controllers
     srdf_str = srdf_doc.toxml().replace("\n", "\\n").replace('"', '\\"')
     controllers_params = ReplaceString(
-        source_file=LaunchConfiguration("controllers_config"),
+        source_file=LaunchConfiguration("ros2_control_params_arm"),
         replacements={
             "<prefix>": prefix,
             "<suffix>": suffix,
@@ -112,48 +90,62 @@ def launch_setup(context, *args, **kwargs):
         },
     )
 
-    start_controllers = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([pkg_duatic_control, "launch", "control.launch.py"])
-        ),
-        launch_arguments={
-            "namespace": LaunchConfiguration("namespace"),
-            "config_path": controllers_params,
-        }.items(),
+    group_action = GroupAction(
+        actions=[
+            # Push Namespace, if the component is started as a standalone component
+            PushRosNamespace(
+                LaunchConfiguration("namespace"),
+                condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
+            ),
+            # Robot State Publisher
+            Node(
+                package="robot_state_publisher",
+                executable="robot_state_publisher",
+                output="screen",
+                parameters=[{"robot_description": doc.toxml()}],
+                remappings=[("/tf", "tf"), ("/tf_static", "tf_static")],
+                condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
+            ),
+            # Controller Manager
+            Node(
+                package="controller_manager",
+                executable="ros2_control_node",
+                parameters=[{"update_rate": 1000}],
+                output={
+                    "stdout": "screen",
+                    "stderr": "screen",
+                },
+                condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
+            ),
+            # Start Controllers
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    PathJoinSubstitution([pkg_duatic_control, "launch", "control.launch.py"])
+                ),
+                launch_arguments={
+                    "namespace": LaunchConfiguration("namespace"),
+                    "config_path": controllers_params,
+                }.items(),
+            ),
+            # Emergency Stop
+            Node(
+                package="dynaarm_extensions",
+                executable="e_stop_node",
+                name="e_stop_node",
+                output="screen",
+                parameters=[{"emergency_stop_button": 9}],  # Change button index here
+                condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
+            ),
+        ]
     )
 
-    # Emergency Stop
-    e_stop_node = Node(
-        package="dynaarm_extensions",
-        executable="e_stop_node",
-        namespace=LaunchConfiguration("namespace"),
-        name="e_stop_node",
-        output="screen",
-        parameters=[{"emergency_stop_button": 9}],  # Change button index here
-        condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
-    )
-
-    # Collect nodes to start
-    nodes_to_start = [
-        start_controllers,
-        robot_state_publisher,
-        controller_manager,
-        e_stop_node,
-    ]
-
-    return nodes_to_start
+    return [group_action]
 
 
 def generate_launch_description():
 
     # Declare the launch arguments
     declared_arguments = [
-        DeclareLaunchArgument(
-            name="gui",
-            default_value="True",
-            choices=["True", "False"],
-            description="Flag to enable joint_state_publisher_gui",
-        ),
         DeclareLaunchArgument(
             name="dof",
             choices=["1", "2", "3", "4", "5", "6"],
@@ -172,9 +164,10 @@ def generate_launch_description():
             description="Select the desired version of robot ",
         ),
         DeclareLaunchArgument(
-            name="urdf_file",
+            name="urdf_file_path",
             default_value=get_package_share_directory("dynaarm_description")
             + "/urdf/dynaarm_standalone.urdf.xacro",
+            description="Path to the robot URDF file",
         ),
         DeclareLaunchArgument(
             name="srdf_file",
@@ -185,17 +178,18 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "start_as_subcomponent",
             default_value="false",
-            description="Whether the platform is started as a subcomponent",
+            description="Whether the dynaarm is started as a subcomponent",
         ),
         DeclareLaunchArgument(
-            "controllers_config",
+            "ros2_control_params_arm",
             default_value=get_package_share_directory("dynaarm_bringup")
             + "/config/controllers_sim.yaml",
             description="Path to the controllers config file",
         ),
         DeclareLaunchArgument(
             name="namespace",
-            default_value="dynaarm1",
+            default_value="",
+            description="Robot namespace",
         ),
         DeclareLaunchArgument("tf_prefix", default_value="", description="Arm identifier"),
     ]
