@@ -45,7 +45,6 @@ def launch_setup(context, *args, **kwargs):
     pkg_duatic_control = FindPackageShare("duatic_control")
     pkg_duatic_simulation = FindPackageShare("duatic_simulation")
 
-
     simulator = LaunchConfiguration("simulator").perform(context)
 
     if simulator == "gazebo":
@@ -93,7 +92,6 @@ def launch_setup(context, *args, **kwargs):
             ),
             # Set use_sim_time parameter
             SetParameter(name="use_sim_time", value=True),
-            
             # Robot State Publisher
             Node(
                 package="robot_state_publisher",
@@ -116,13 +114,18 @@ def launch_setup(context, *args, **kwargs):
                     "yaw": LaunchConfiguration("initial_pose_yaw"),
                 }.items(),
                 condition=IfCondition(
-                    PythonExpression([
-                        "'", LaunchConfiguration("start_as_subcomponent"), "' != 'true'",
-                        " and '", LaunchConfiguration("simulator"), "' == 'gazebo'"
-                    ])
+                    PythonExpression(
+                        [
+                            "'",
+                            LaunchConfiguration("start_as_subcomponent"),
+                            "' != 'true'",
+                            " and '",
+                            LaunchConfiguration("simulator"),
+                            "' == 'gazebo'",
+                        ]
+                    )
                 ),
             ),
-
             # Controller Manager
             Node(
                 package="controller_manager",
@@ -133,13 +136,18 @@ def launch_setup(context, *args, **kwargs):
                     "stderr": "screen",
                 },
                 condition=IfCondition(
-                    PythonExpression([
-                        "'", LaunchConfiguration("start_as_subcomponent"), "'.lower() != 'true'",
-                        " and '", LaunchConfiguration("simulator"), "' == 'isaac'"
-                    ])
+                    PythonExpression(
+                        [
+                            "'",
+                            LaunchConfiguration("start_as_subcomponent"),
+                            "'.lower() != 'true'",
+                            " and '",
+                            LaunchConfiguration("simulator"),
+                            "' == 'isaac'",
+                        ]
+                    )
                 ),
             ),
-
             # Start Controllers
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
@@ -215,14 +223,12 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "initial_pose_yaw", default_value="0.0", description="Spawn rotation around axis z."
         ),
-        DeclareLaunchArgument(
-            "tf_prefix", default_value="", description="Arm identifier"
-        ),
+        DeclareLaunchArgument("tf_prefix", default_value="", description="Arm identifier"),
         DeclareLaunchArgument(
             "simulator",
             default_value="isaac",
             choices=["gazebo", "isaac"],
-            description="Which simulator backend to use."
+            description="Which simulator backend to use.",
         ),
     ]
 
