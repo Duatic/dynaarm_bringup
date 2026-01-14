@@ -30,9 +30,9 @@ from launch.actions import (
     OpaqueFunction,
     GroupAction,
 )
-from launch.conditions import UnlessCondition
+from launch.conditions import UnlessCondition, IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 
 from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node, PushRosNamespace, SetParameter
@@ -45,6 +45,15 @@ def launch_setup(context, *args, **kwargs):
     pkg_duatic_control = FindPackageShare("duatic_control")
     pkg_duatic_simulation = FindPackageShare("duatic_simulation")
 
+    simulator = LaunchConfiguration("simulator").perform(context)
+
+    if simulator == "gazebo":
+        xacro_mode = "sim"
+    elif simulator == "isaac":
+        xacro_mode = "isaac"
+    else:
+        raise RuntimeError(f"Unknown simulator: {simulator}")
+
     # Process URDF file
     doc = xacro.parse(open(LaunchConfiguration("urdf_file_path").perform(context)))
     tf_prefix = LaunchConfiguration("tf_prefix").perform(context)
@@ -52,18 +61,18 @@ def launch_setup(context, *args, **kwargs):
         doc,
         mappings={
             "namespace": LaunchConfiguration("namespace").perform(context),
-            "mode": "sim",
+            "mode": xacro_mode,
             "dof": LaunchConfiguration("dof").perform(context),
             "covers": LaunchConfiguration("covers").perform(context),
             "version": LaunchConfiguration("version").perform(context),
-            "tf_prefix": tf_prefix + "/" if tf_prefix else "",
+            "tf_prefix": tf_prefix + "_" if tf_prefix else "",
         },
     )
 
     # Process ros2_control_params file
     tf_prefix = LaunchConfiguration("tf_prefix").perform(context)
     if tf_prefix != "":
-        prefix = tf_prefix + "/"
+        prefix = tf_prefix + "_"
         suffix = "_" + tf_prefix
     else:
         prefix = ""
@@ -104,7 +113,40 @@ def launch_setup(context, *args, **kwargs):
                     "z": LaunchConfiguration("initial_pose_z"),
                     "yaw": LaunchConfiguration("initial_pose_yaw"),
                 }.items(),
-                condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
+                condition=IfCondition(
+                    PythonExpression(
+                        [
+                            "'",
+                            LaunchConfiguration("start_as_subcomponent"),
+                            "' != 'true'",
+                            " and '",
+                            LaunchConfiguration("simulator"),
+                            "' == 'gazebo'",
+                        ]
+                    )
+                ),
+            ),
+            # Controller Manager
+            Node(
+                package="controller_manager",
+                executable="ros2_control_node",
+                parameters=[{"update_rate": 1000}],
+                output={
+                    "stdout": "screen",
+                    "stderr": "screen",
+                },
+                condition=IfCondition(
+                    PythonExpression(
+                        [
+                            "'",
+                            LaunchConfiguration("start_as_subcomponent"),
+                            "'.lower() != 'true'",
+                            " and '",
+                            LaunchConfiguration("simulator"),
+                            "' == 'isaac'",
+                        ]
+                    )
+                ),
             ),
             # Start Controllers
             IncludeLaunchDescription(
@@ -182,6 +224,12 @@ def generate_launch_description():
             "initial_pose_yaw", default_value="0.0", description="Spawn rotation around axis z."
         ),
         DeclareLaunchArgument("tf_prefix", default_value="", description="Arm identifier"),
+        DeclareLaunchArgument(
+            "simulator",
+            default_value="isaac",
+            choices=["gazebo", "isaac"],
+            description="Which simulator backend to use.",
+        ),
     ]
 
     return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])
