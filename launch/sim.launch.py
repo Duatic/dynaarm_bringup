@@ -30,9 +30,9 @@ from launch.actions import (
     OpaqueFunction,
     GroupAction,
 )
-from launch.conditions import UnlessCondition, IfCondition
+from launch.conditions import UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node, PushRosNamespace, SetParameter
@@ -128,7 +128,7 @@ def launch_setup(context, *args, **kwargs):
                     "stderr": "screen",
                 },
                 # Only launch if not started as subcomponent and using Isaac Sim
-                condition=simulator_not_subcomponent_condition("isaac")
+                condition=simulator_not_subcomponent_condition("isaac"),
             ),
             # Start Controllers
             IncludeLaunchDescription(
