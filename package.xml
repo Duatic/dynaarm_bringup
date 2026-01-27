@@ -17,6 +17,7 @@
   <exec_depend>duatic_dynaarm_driver</exec_depend>
   <exec_depend>duatic_dynaarm_extensions</exec_depend>
   <exec_depend>duatic_dynaarm_msgs</exec_depend>
+  <exec_depend>nav2_common</exec_depend>
   <exec_depend>xacro</exec_depend>
 
   <export>
