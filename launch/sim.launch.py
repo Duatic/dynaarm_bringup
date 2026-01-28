@@ -50,9 +50,9 @@ def launch_setup(context, *args, **kwargs):
     simulator = LaunchConfiguration("simulator").perform(context)
 
     if simulator == "gazebo":
-        xacro_mode = "sim"
+        sim_tool = "sim"
     elif simulator == "isaac":
-        xacro_mode = "isaac"
+        sim_tool = "isaac"
     else:
         raise RuntimeError(f"Unknown simulator: {simulator}")
 
@@ -63,7 +63,7 @@ def launch_setup(context, *args, **kwargs):
         doc,
         mappings={
             "namespace": LaunchConfiguration("namespace").perform(context),
-            "mode": xacro_mode,
+            "mode": sim_tool,
             "dof": LaunchConfiguration("dof").perform(context),
             "covers": LaunchConfiguration("covers").perform(context),
             "version": LaunchConfiguration("version").perform(context),
@@ -208,7 +208,7 @@ def generate_launch_description():
         DeclareLaunchArgument("tf_prefix", default_value="", description="Arm identifier"),
         DeclareLaunchArgument(
             "simulator",
-            default_value="isaac",
+            default_value="gazebo",
             choices=["gazebo", "isaac"],
             description="Which simulator backend to use.",
         ),
