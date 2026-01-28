@@ -39,11 +39,22 @@ from launch_ros.actions import Node, PushRosNamespace, SetParameter
 
 from nav2_common.launch import ReplaceString
 
+from duatic_helpers import simulator_not_subcomponent_condition
+
 
 def launch_setup(context, *args, **kwargs):
     # Package Directories
     pkg_duatic_control = FindPackageShare("duatic_control")
     pkg_duatic_simulation = FindPackageShare("duatic_simulation")
+
+    simulator = LaunchConfiguration("simulator").perform(context)
+
+    if simulator == "gazebo":
+        sim_tool = "sim"
+    elif simulator == "isaac":
+        sim_tool = "isaac"
+    else:
+        raise RuntimeError(f"Unknown simulator: {simulator}")
 
     # Process URDF file
     doc = xacro.parse(open(LaunchConfiguration("urdf_file_path").perform(context)))
@@ -52,7 +63,7 @@ def launch_setup(context, *args, **kwargs):
         doc,
         mappings={
             "namespace": LaunchConfiguration("namespace").perform(context),
-            "mode": "sim",
+            "mode": sim_tool,
             "dof": LaunchConfiguration("dof").perform(context),
             "covers": LaunchConfiguration("covers").perform(context),
             "version": LaunchConfiguration("version").perform(context),
@@ -104,7 +115,20 @@ def launch_setup(context, *args, **kwargs):
                     "z": LaunchConfiguration("initial_pose_z"),
                     "yaw": LaunchConfiguration("initial_pose_yaw"),
                 }.items(),
-                condition=UnlessCondition(LaunchConfiguration("start_as_subcomponent")),
+                # Only spawn if not started as subcomponent and using Gazebo
+                condition=simulator_not_subcomponent_condition("gazebo"),
+            ),
+            # Controller Manager
+            Node(
+                package="controller_manager",
+                executable="ros2_control_node",
+                parameters=[{"update_rate": 1000}],
+                output={
+                    "stdout": "screen",
+                    "stderr": "screen",
+                },
+                # Only launch if not started as subcomponent and using Isaac Sim
+                condition=simulator_not_subcomponent_condition("isaac"),
             ),
             # Start Controllers
             IncludeLaunchDescription(
@@ -182,6 +206,12 @@ def generate_launch_description():
             "initial_pose_yaw", default_value="0.0", description="Spawn rotation around axis z."
         ),
         DeclareLaunchArgument("tf_prefix", default_value="", description="Arm identifier"),
+        DeclareLaunchArgument(
+            "simulator",
+            default_value="gazebo",
+            choices=["gazebo", "isaac"],
+            description="Which simulator backend to use.",
+        ),
     ]
 
     return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])
